@@ -1,6 +1,6 @@
 FROM debian:bookworm-slim AS telegram-bot-api-builder
 
-ARG TELEGRAM_BOT_API_REF=master
+ARG TELEGRAM_BOT_API_REF=0a9e5696ba149c99bedf972f040d2e28776a8a4f
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -12,8 +12,11 @@ RUN apt-get update \
         make \
         libssl-dev \
         zlib1g-dev \
-    && git clone --recursive --depth 1 --branch "${TELEGRAM_BOT_API_REF}" \
-        https://github.com/tdlib/telegram-bot-api.git /src/telegram-bot-api \
+    && git init /src/telegram-bot-api \
+    && git -C /src/telegram-bot-api remote add origin https://github.com/tdlib/telegram-bot-api.git \
+    && git -C /src/telegram-bot-api fetch --depth 1 origin "${TELEGRAM_BOT_API_REF}" \
+    && git -C /src/telegram-bot-api checkout --detach FETCH_HEAD \
+    && git -C /src/telegram-bot-api submodule update --init --recursive --depth 1 \
     && cmake -S /src/telegram-bot-api -B /src/telegram-bot-api/build \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/usr/local \
@@ -30,7 +33,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     TELEGRAM_LOCAL_MODE=true
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg ca-certificates curl \
+    && apt-get install -y --no-install-recommends \
+        ffmpeg \
+        ca-certificates \
+        curl \
+        libssl3 \
+        libstdc++6 \
+        zlib1g \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
