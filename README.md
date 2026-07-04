@@ -41,7 +41,22 @@ TELEGRAM_API_ID=your-api-id
 TELEGRAM_API_HASH=your-api-hash
 ```
 
-The included `docker/start.sh` starts a local `telegram-bot-api` binary when it is installed in the image. For local development, `docker-compose.yml` runs the bot and a separate local Bot API service.
+The Docker image builds and includes a local `telegram-bot-api` binary, and `docker/start.sh` starts it automatically when `TELEGRAM_LOCAL_MODE=true`. The Docker deployment defaults to this local mode so Hugging Face Spaces can upload files up to Telegram's 2 GB bot limit after you add `BOT_TOKEN`, `TELEGRAM_API_ID`, and `TELEGRAM_API_HASH` as Space secrets. For local development, `docker-compose.yml` runs the bot and a separate local Bot API service.
+
+For a public Hugging Face Space, never commit a real `.env` file. Add these values in **Settings → Variables and secrets → Secrets**:
+
+```env
+BOT_TOKEN=your-bot-token-from-BotFather
+TELEGRAM_API_ID=your-api-id
+TELEGRAM_API_HASH=your-api-hash
+```
+
+The Docker image already sets these non-secret defaults:
+
+```env
+TELEGRAM_API_BASE_URL=http://127.0.0.1:8081
+TELEGRAM_LOCAL_MODE=true
+```
 
 ## Local development
 
