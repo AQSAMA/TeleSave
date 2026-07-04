@@ -16,7 +16,11 @@ class ConcurrencyLimiter:
     async def acquire(self, user_id: int) -> AsyncIterator[None]:
         user_semaphore = self._per_user[user_id]
         await self._global.acquire()
-        await user_semaphore.acquire()
+        try:
+            await user_semaphore.acquire()
+        except BaseException:
+            self._global.release()
+            raise
         try:
             yield
         finally:
