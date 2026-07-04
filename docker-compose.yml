@@ -1,0 +1,29 @@
+services:
+  bot:
+    build: .
+    env_file: .env
+    environment:
+      TELEGRAM_API_BASE_URL: ${TELEGRAM_API_BASE_URL:-http://local-bot-api:8081}
+      TELEGRAM_LOCAL_MODE: ${TELEGRAM_LOCAL_MODE:-true}
+    ports:
+      - "7860:7860"
+    volumes:
+      - telesave_tmp:/tmp/telesave
+    depends_on:
+      - local-bot-api
+
+  local-bot-api:
+    image: aiogram/telegram-bot-api:latest
+    environment:
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH}
+    command:
+      - --local
+      - --http-port=8081
+      - --dir=/var/lib/telegram-bot-api
+    volumes:
+      - telegram_bot_api:/var/lib/telegram-bot-api
+
+volumes:
+  telesave_tmp:
+  telegram_bot_api:

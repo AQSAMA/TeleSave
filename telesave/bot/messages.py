@@ -1,0 +1,6 @@
+START = """Hi! Send me a public social media link or direct download URL and I'll send the media back to you."""
+HELP = """Send one HTTP or HTTPS URL. Public videos, photos, audio, documents, and archives are supported when the source allows downloading."""
+PROCESSING = "Got it — downloading your link now…"
+DONE = "Done."
+BUSY = "You're already downloading something. Please wait for it to finish before sending another link."
+NO_URL = "Please send a message containing a valid HTTP or HTTPS link."

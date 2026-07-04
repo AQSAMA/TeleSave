@@ -1,0 +1,30 @@
+FROM python:3.12-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PORT=7860 \
+    TEMP_DIR=/tmp/telesave
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY pyproject.toml README.md ./
+COPY telesave ./telesave
+COPY docker/start.sh ./docker/start.sh
+
+RUN pip install --upgrade pip \
+    && pip install . \
+    && useradd --create-home --shell /usr/sbin/nologin appuser \
+    && mkdir -p /tmp/telesave /tmp/telegram-bot-api \
+    && chown -R appuser:appuser /app /tmp/telesave /tmp/telegram-bot-api
+
+USER appuser
+EXPOSE 7860
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:${PORT}/healthz" || exit 1
+
+CMD ["./docker/start.sh"]
