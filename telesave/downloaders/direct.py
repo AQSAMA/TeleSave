@@ -39,15 +39,27 @@ class DirectDownloader:
                     raise DownloadFailedError()
                 await assert_public_url(str(response.url))
                 content_length = response.headers.get("content-length")
-                if content_length and int(content_length) > self._settings.max_file_size_bytes:
-                    raise DownloadTooLargeError()
+                if content_length:
+                    try:
+                        content_size = int(content_length.strip())
+                    except ValueError:
+                        content_size = None
+                    if content_size is not None and content_size < 0:
+                        raise DownloadFailedError()
+                    if (
+                        content_size is not None
+                        and content_size > self._settings.max_file_size_bytes
+                    ):
+                        raise DownloadTooLargeError()
                 filename = self._filename_from_headers(response.headers) or self._filename_from_url(
                     str(response.url)
                 )
                 path = self._workdir / filename
                 total = 0
                 async with aiofiles.open(path, "wb") as file:
-                    async for chunk in response.aiter_bytes(self._settings.direct_download_chunk_size):
+                    async for chunk in response.aiter_bytes(
+                        self._settings.direct_download_chunk_size
+                    ):
                         total += len(chunk)
                         if total > self._settings.max_file_size_bytes:
                             raise DownloadTooLargeError()

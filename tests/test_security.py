@@ -24,3 +24,13 @@ def test_normalize_rejects_credentials() -> None:
 def test_assert_public_url_rejects_loopback_ip() -> None:
     with pytest.raises(UnsafeUrlError):
         asyncio.run(assert_public_url("http://127.0.0.1/private"))
+
+
+def test_normalize_rejects_out_of_range_port() -> None:
+    with pytest.raises(InvalidUrlError):
+        normalize_and_validate_url("http://example.com:99999/")
+
+
+def test_assert_public_url_rejects_out_of_range_port() -> None:
+    with pytest.raises(InvalidUrlError):
+        asyncio.run(assert_public_url("http://example.com:99999/"))

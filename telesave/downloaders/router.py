@@ -3,6 +3,7 @@ from urllib.parse import urlparse
 
 from telesave.config import Settings
 from telesave.core.models import DownloadResult
+from telesave.core.security import assert_public_url
 from telesave.downloaders.direct import DirectDownloader
 from telesave.downloaders.ytdlp import YtDlpDownloader
 
@@ -18,6 +19,7 @@ class DownloaderRouter:
         self._ytdlp = YtDlpDownloader(settings, workdir)
 
     async def download(self, url: str) -> DownloadResult:
+        await assert_public_url(url)
         suffix = Path(urlparse(url).path).suffix.lower()
         if suffix in _DIRECT_EXTENSIONS:
             return await self._direct.download(url)

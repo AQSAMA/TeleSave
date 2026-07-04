@@ -1,14 +1,17 @@
 import asyncio
 import logging
+import sys
 from pathlib import Path
-from typing import Any
-
-import yt_dlp
 
 from telesave.config import Settings
-from telesave.core.errors import DownloadFailedError, DownloadTooLargeError, UnsupportedSourceError
+from telesave.core.errors import (
+    DownloadFailedError,
+    DownloadTimeoutError,
+    DownloadTooLargeError,
+    UnsupportedSourceError,
+)
 from telesave.core.models import DownloadResult, MediaFile
-from telesave.core.security import normalize_and_validate_url
+from telesave.core.security import assert_public_url, normalize_and_validate_url
 from telesave.downloaders.metadata import guess_media_kind, guess_mime_type
 
 logger = logging.getLogger(__name__)
@@ -20,64 +23,52 @@ class YtDlpDownloader:
         self._workdir = workdir
 
     async def download(self, url: str) -> DownloadResult:
-        normalize_and_validate_url(url)
+        normalized_url = normalize_and_validate_url(url)
+        await assert_public_url(normalized_url)
         try:
-            return await asyncio.wait_for(
-                asyncio.to_thread(self._download_blocking, url),
-                timeout=self._settings.max_download_seconds,
-            )
-        except TimeoutError as exc:
-            raise DownloadFailedError() from exc
+            return await self._download_subprocess(normalized_url)
         except DownloadTooLargeError:
             raise
-        except yt_dlp.utils.UnsupportedError as exc:
-            raise UnsupportedSourceError() from exc
-        except yt_dlp.utils.DownloadError as exc:
+        except DownloadTimeoutError:
+            raise
+        except UnsupportedSourceError:
+            raise
+        except OSError as exc:
             raise DownloadFailedError() from exc
 
-    def _download_blocking(self, url: str) -> DownloadResult:
-        output_template = str(self._workdir / "%(title).180B [%(id)s].%(ext)s")
-        options: dict[str, Any] = {
-            "outtmpl": output_template,
-            "format": self._settings.ytdlp_format
-            or (
-                f"best[filesize<={self._settings.max_file_size_bytes}]/"
-                f"best[filesize_approx<={self._settings.max_file_size_bytes}]/best"
-            ),
-            "merge_output_format": "mp4",
-            "noplaylist": False,
-            "quiet": True,
-            "no_warnings": True,
-            "retries": 3,
-            "fragment_retries": 3,
-            "socket_timeout": 30,
-            "continuedl": True,
-            "overwrites": False,
-            "restrictfilenames": False,
-            "windowsfilenames": True,
-            "max_filesize": self._settings.max_file_size_bytes,
-        }
-        if self._settings.ytdlp_cookies_file:
-            options["cookiefile"] = str(self._settings.ytdlp_cookies_file)
-        if self._settings.ytdlp_user_agent:
-            options["user_agent"] = self._settings.ytdlp_user_agent
-        if self._settings.ytdlp_proxy:
-            options["proxy"] = str(self._settings.ytdlp_proxy)
-
+    async def _download_subprocess(self, url: str) -> DownloadResult:
         before = set(self._workdir.iterdir())
-        with yt_dlp.YoutubeDL(options) as ydl:
-            info = ydl.extract_info(url, download=True)
+        process = await asyncio.create_subprocess_exec(
+            *self._build_command(url),
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            _, stderr = await asyncio.wait_for(
+                process.communicate(), timeout=self._settings.max_download_seconds
+            )
+        except TimeoutError as exc:
+            process.kill()
+            await process.communicate()
+            raise DownloadTimeoutError() from exc
+        except BaseException:
+            if process.returncode is None:
+                process.kill()
+                await process.communicate()
+            raise
+
+        if process.returncode != 0:
+            output = (stderr or b"").decode(errors="replace")
+            logger.info("ytdlp_download_failed", extra={"returncode": process.returncode})
+            if "Unsupported URL" in output:
+                raise UnsupportedSourceError()
+            if "File is larger than max-filesize" in output:
+                raise DownloadTooLargeError()
+            raise DownloadFailedError()
+
         after = [path for path in self._workdir.iterdir() if path not in before and path.is_file()]
-        if not after:
-            downloaded = yt_dlp.utils.traverse_obj(
-                info, ("requested_downloads", ..., "filepath")
-            ) or []
-            after = [Path(path) for path in downloaded]
         files: list[MediaFile] = []
-        title = info.get("title") if isinstance(info, dict) else None
         for path in after:
-            if not path.exists() or not path.is_file():
-                continue
             size = path.stat().st_size
             if size > self._settings.max_file_size_bytes:
                 raise DownloadTooLargeError()
@@ -88,11 +79,49 @@ class YtDlpDownloader:
                     kind=guess_media_kind(path, mime_type),
                     filename=path.name,
                     mime_type=mime_type,
-                    caption=title,
-                    title=title,
                     size=size,
                 )
             )
         if not files:
             raise DownloadFailedError()
-        return DownloadResult(source_url=url, files=files, title=title, webpage_url=url)
+        return DownloadResult(source_url=url, files=files, webpage_url=url)
+
+    def _build_command(self, url: str) -> list[str]:
+        output_template = str(self._workdir / "%(title).180B [%(id)s].%(ext)s")
+        command = [
+            sys.executable,
+            "-m",
+            "yt_dlp",
+            "--quiet",
+            "--no-warnings",
+            "--no-progress",
+            "--output",
+            output_template,
+            "--format",
+            self._settings.ytdlp_format
+            or (
+                f"best[filesize<={self._settings.max_file_size_bytes}]/"
+                f"best[filesize_approx<={self._settings.max_file_size_bytes}]/best"
+            ),
+            "--merge-output-format",
+            "mp4",
+            "--retries",
+            "3",
+            "--fragment-retries",
+            "3",
+            "--socket-timeout",
+            "30",
+            "--continue",
+            "--no-overwrites",
+            "--windows-filenames",
+            "--max-filesize",
+            str(self._settings.max_file_size_bytes),
+        ]
+        if self._settings.ytdlp_cookies_file:
+            command.extend(["--cookies", str(self._settings.ytdlp_cookies_file)])
+        if self._settings.ytdlp_user_agent:
+            command.extend(["--user-agent", self._settings.ytdlp_user_agent])
+        if self._settings.ytdlp_proxy:
+            command.extend(["--proxy", str(self._settings.ytdlp_proxy)])
+        command.append(url)
+        return command
