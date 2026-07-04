@@ -40,11 +40,11 @@ class YtDlpDownloader:
         before = set(self._workdir.iterdir())
         process = await asyncio.create_subprocess_exec(
             *self._build_command(url),
-            stdout=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
         )
         try:
-            stdout, stderr = await asyncio.wait_for(
+            _, stderr = await asyncio.wait_for(
                 process.communicate(), timeout=self._settings.max_download_seconds
             )
         except TimeoutError as exc:
@@ -58,7 +58,7 @@ class YtDlpDownloader:
             raise
 
         if process.returncode != 0:
-            output = (stderr or stdout).decode(errors="replace")
+            output = (stderr or b"").decode(errors="replace")
             logger.info("ytdlp_download_failed", extra={"returncode": process.returncode})
             if "Unsupported URL" in output:
                 raise UnsupportedSourceError()
@@ -92,8 +92,9 @@ class YtDlpDownloader:
             sys.executable,
             "-m",
             "yt_dlp",
+            "--quiet",
             "--no-warnings",
-            "--newline",
+            "--no-progress",
             "--output",
             output_template,
             "--format",

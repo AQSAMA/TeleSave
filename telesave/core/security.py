@@ -17,6 +17,10 @@ def normalize_and_validate_url(raw: str) -> str:
         raise UnsafeUrlError()
     if not parsed.hostname:
         raise InvalidUrlError()
+    try:
+        _ = parsed.port
+    except ValueError as exc:
+        raise InvalidUrlError() from exc
     return value
 
 
