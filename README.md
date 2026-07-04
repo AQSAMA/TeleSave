@@ -12,7 +12,7 @@ TeleSave is an asynchronous Telegram download bot designed for Docker deployment
 - Async Telegram bot built with aiogram 3.
 - Broad social/media support through yt-dlp.
 - Direct HTTP/HTTPS streaming downloader for files.
-- Optional local Telegram Bot API server mode for uploads up to 2 GB.
+- Bundled local Telegram Bot API server mode for uploads up to 2 GB.
 - Automatic Telegram send method selection for photos, videos, audio, voice, albums, and documents.
 - SSRF protection for direct download URLs.
 - Configurable file-size, timeout, and concurrency limits.
@@ -41,7 +41,9 @@ TELEGRAM_API_ID=your-api-id
 TELEGRAM_API_HASH=your-api-hash
 ```
 
-The Docker image builds and includes a local `telegram-bot-api` binary, and `docker/start.sh` starts it automatically when `TELEGRAM_LOCAL_MODE=true`. The Docker deployment defaults to this local mode so Hugging Face Spaces can upload files up to Telegram's 2 GB bot limit after you add `BOT_TOKEN`, `TELEGRAM_API_ID`, and `TELEGRAM_API_HASH` as Space secrets. For local development, `docker-compose.yml` runs the bot and a separate local Bot API service.
+The Docker image copies a ready-to-use `telegram-bot-api` binary from the `aiogram/telegram-bot-api` image instead of compiling TDLib from source. This keeps Hugging Face Spaces builds fast while preserving the original local Bot API functionality for uploads up to Telegram's 2 GB bot limit.
+
+`docker/start.sh` starts the bundled local Bot API server automatically when `TELEGRAM_LOCAL_MODE=true` and `TELEGRAM_API_BASE_URL` points at `127.0.0.1` or `localhost`. For local development, `docker-compose.yml` can still run the bot and a separate local Bot API service.
 
 For a public Hugging Face Space, never commit a real `.env` file. Add these values in **Settings → Variables and secrets → Secrets**:
 
