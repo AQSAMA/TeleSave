@@ -1,26 +1,4 @@
-FROM debian:bookworm-slim AS telegram-bot-api-builder
-
-ARG TELEGRAM_BOT_API_REF=0a9e5696ba149c99bedf972f040d2e28776a8a4f
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        ca-certificates \
-        cmake \
-        g++ \
-        gperf \
-        git \
-        make \
-        libssl-dev \
-        zlib1g-dev \
-    && git init /src/telegram-bot-api \
-    && git -C /src/telegram-bot-api remote add origin https://github.com/tdlib/telegram-bot-api.git \
-    && git -C /src/telegram-bot-api fetch --depth 1 origin "${TELEGRAM_BOT_API_REF}" \
-    && git -C /src/telegram-bot-api checkout --detach FETCH_HEAD \
-    && git -C /src/telegram-bot-api submodule update --init --recursive --depth 1 \
-    && cmake -S /src/telegram-bot-api -B /src/telegram-bot-api/build \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX=/usr/local \
-    && cmake --build /src/telegram-bot-api/build --target install --parallel "$(nproc)"
+FROM aiogram/telegram-bot-api:10.1 AS telegram-bot-api
 
 FROM python:3.12-slim AS runtime
 
@@ -44,7 +22,7 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY --from=telegram-bot-api-builder /usr/local/bin/telegram-bot-api /usr/local/bin/telegram-bot-api
+COPY --from=telegram-bot-api /usr/local/bin/telegram-bot-api /usr/local/bin/telegram-bot-api
 
 COPY pyproject.toml README.md ./
 COPY telesave ./telesave
